@@ -219,6 +219,7 @@ typedef enum {
 #define BBR_HYSTART_THRESHOLD_RTT 50000
 #endif
 
+#define BIG_RTT 120000
 
 static const double bbr_pacing_gain_cycle[BBR_GAIN_CYCLE_LEN] = { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.25, 0.75};
 
@@ -266,6 +267,7 @@ typedef struct st_picoquic_bbr_state_t {
     unsigned int last_loss_was_timeout : 1;
     unsigned int cycle_on_loss : 1;
 
+    double rtt_gain;
 } picoquic_bbr_state_t;
 
 void BBRltbwSampling(picoquic_bbr_state_t* bbr_state, picoquic_path_t* path_x, uint64_t current_time);
@@ -345,6 +347,7 @@ static void picoquic_bbr_reset(picoquic_bbr_state_t* bbr_state, picoquic_path_t*
     bbr_state->cycle_stamp = current_time;
     bbr_state->cycle_index = 0;
     bbr_state->cycle_start = 0;
+    bbr_state->rtt_gain = 1.2;
 
     BBREnterStartup(bbr_state);
     BBRSetSendQuantum(bbr_state, path_x);
@@ -664,6 +667,13 @@ void BBREnterProbeBW(picoquic_bbr_state_t* bbr_state, picoquic_path_t* path_x, u
     bbr_state->state = picoquic_bbr_alg_probe_bw;
     bbr_state->pacing_gain = 1.0;
     bbr_state->cwnd_gain = 2.0;
+
+    if (bbr_state->rt_prop > BIG_RTT) {
+        bbr_state->pacing_gain = bbr_state->pacing_gain * bbr_state->rtt_gain;
+        bbr_state->cwnd_gain = bbr_state->cwnd_gain * bbr_state->rtt_gain;
+    }
+    printf("pacing_gain%f\n", bbr_state->pacing_gain);
+    printf("cwnd_gain%f\n", bbr_state->cwnd_gain);
 
     if (bbr_state->rt_prop > PICOQUIC_TARGET_RENO_RTT) {
         uint64_t ref_rt = (bbr_state->rt_prop > PICOQUIC_TARGET_SATELLITE_RTT) ? PICOQUIC_TARGET_SATELLITE_RTT : bbr_state->rt_prop;
